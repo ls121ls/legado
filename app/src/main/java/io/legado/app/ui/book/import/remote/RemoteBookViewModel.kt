@@ -6,6 +6,7 @@ import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookType
 import io.legado.app.data.appDb
+import io.legado.app.data.entities.Book
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.config.AppConfig
@@ -153,6 +154,40 @@ class RemoteBookViewModel(application: Application) : BaseViewModel(application)
             }
         }.onFinally {
             finally.invoke()
+        }
+    }
+
+    /**
+     * 下载单本书到本地并导入书架
+     */
+    fun downloadAndImport(
+        remoteBook: RemoteBook,
+        onSuccess: (Book) -> Unit,
+        onFinally: () -> Unit
+    ) {
+        execute {
+            val bookWebDav = remoteBookWebDav
+                ?: throw NoStackTraceException("没有配置webDav")
+            val downloadBookUri = bookWebDav.downloadRemoteBook(remoteBook)
+            val books = LocalBook.importFiles(downloadBookUri)
+            books.forEach { book ->
+                book.origin = BookType.webDavTag + CustomUrl(remoteBook.path)
+                    .putAttribute("serverID", bookWebDav.serverID)
+                    .toString()
+                book.save()
+            }
+            remoteBook.isOnBookShelf = true
+            books.firstOrNull() ?: throw NoStackTraceException("导入书籍失败")
+        }.onSuccess {
+            onSuccess.invoke(it)
+        }.onError {
+            AppLog.put("下载WebDav书籍出错\n${it.localizedMessage}", it)
+            context.toastOnUi("下载WebDav书籍出错\n${it.localizedMessage}")
+            if (it is SecurityException) {
+                permissionDenialLiveData.postValue(1)
+            }
+        }.onFinally {
+            onFinally.invoke()
         }
     }
 

@@ -25,6 +25,7 @@ import io.legado.app.utils.FileDoc
 import io.legado.app.utils.find
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
+import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
@@ -204,20 +205,33 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
         viewModel.updateCallBackFlow(newText)
     }
 
-    private fun showRemoteBookDownloadAlert(
-        remoteBook: RemoteBook,
-        onDownloadFinish: (() -> Unit)? = null
-    ) {
+    private fun showRemoteBookDownloadAlert(remoteBook: RemoteBook) {
         alert(
             R.string.draw,
             R.string.archive_not_found
         ) {
             okButton {
-                viewModel.addToBookshelf(hashSetOf(remoteBook)) {
-                    onDownloadFinish?.invoke()
-                }
+                downloadAndOpen(remoteBook)
             }
             noButton()
+        }
+    }
+
+    /**
+     * 下载到本地书籍目录, 导入书架后打开阅读
+     */
+    private fun downloadAndOpen(remoteBook: RemoteBook) {
+        binding.refreshProgressBar.isAutoLoading = true
+        toastOnUi("正在下载: ${remoteBook.filename}")
+        viewModel.downloadAndImport(remoteBook, { book ->
+            adapter.notifyDataSetChanged()
+            if (ArchiveUtils.isArchive(remoteBook.filename)) {
+                startRead(remoteBook)
+            } else {
+                startReadBook(book)
+            }
+        }) {
+            binding.refreshProgressBar.isAutoLoading = false
         }
     }
 
@@ -226,15 +240,15 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
         if (!ArchiveUtils.isArchive(downloadFileName)) {
             appDb.bookDao.getBookByFileName(downloadFileName)?.let {
                 startReadBook(it)
+                return
             }
+            downloadAndOpen(remoteBook)
         } else {
             AppConfig.defaultBookTreeUri ?: return
             val downloadArchiveFileDoc = FileDoc.fromUri(Uri.parse(AppConfig.defaultBookTreeUri), true)
                 .find(downloadFileName)
             if (downloadArchiveFileDoc == null) {
-                showRemoteBookDownloadAlert(remoteBook) {
-                    startRead(remoteBook)
-                }
+                showRemoteBookDownloadAlert(remoteBook)
             } else {
                 onArchiveFileClick(downloadArchiveFileDoc)
             }

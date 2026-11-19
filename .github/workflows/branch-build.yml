@@ -1,0 +1,58 @@
+name: Branch Build
+
+on:
+  push:
+    branches-ignore:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: branch-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6.4.0
+
+      - name: Prepare Assets
+        run: echo "" > app/src/main/assets/18PlusList.txt
+
+      - name: Release APK Sign
+        run: |
+          cp .github/workflows/legado.jks app/legado.jks
+          {
+            echo "RELEASE_STORE_FILE=./legado.jks"
+            echo "RELEASE_KEY_ALIAS=legado"
+            echo "RELEASE_STORE_PASSWORD=gedoor_legado"
+            echo "RELEASE_KEY_PASSWORD=gedoor_legado"
+          } >> gradle.properties
+
+      - name: Build With Gradle
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease -ParmOnly=true \
+            --build-cache --parallel --daemon --warning-mode all
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: legado-app-release-${{ github.sha }}
+          if-no-files-found: error
+          path: app/build/outputs/apk/**/*.apk

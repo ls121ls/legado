@@ -76,7 +76,16 @@ class RemoteBookAdapter(context: Context, val callBack: CallBack) :
             getItem(holder.layoutPosition)?.let {
                 if (it.isDir) {
                     callBack.openDir(it)
-                } else if (!it.isOnBookShelf) {
+                } else {
+                    /* 点击书籍直接下载到本地并阅读 */
+                    callBack.startRead(it)
+                }
+            }
+        }
+        binding.cbSelect.setOnClickListener {
+            getItem(holder.layoutPosition)?.let {
+                if (!it.isDir && !it.isOnBookShelf) {
+                    /* 勾选框仅用于多选加入书架 */
                     if (!selected.contains(it)) {
                         selected.add(it)
                     } else {
@@ -84,9 +93,6 @@ class RemoteBookAdapter(context: Context, val callBack: CallBack) :
                     }
                     notifyItemChanged(holder.layoutPosition, true)
                     callBack.upCountView()
-                } else {
-                    /* 点击开始阅读 */
-                    callBack.startRead(it)
                 }
             }
         }
